@@ -10,7 +10,7 @@ require 'heroku_cloud_backup/version'
 
 module HerokuCloudBackup
   class << self
-    def execute
+    def execute(index = 0)
       log "heroku:backup started"
 
       b = client.get_backups.last
@@ -31,17 +31,21 @@ module HerokuCloudBackup
       db_name = b["from_name"]
       base_name = created_at.strftime('%Y-%m-%d-%H%M%S')
       
-      public_urls.each_with_index do |public_url, index|
+      if public_urls[index]
         begin
           name = "#{base_name}_#{index}.dump"
           log "creating #{@backup_path}/#{b["from_name"]}/#{name}"
-          directory.files.create(:key => "#{backup_path}/#{b["from_name"]}/#{name}", :body => open(public_url))
+          directory.files.create(:key => "#{backup_path}/#{b["from_name"]}/#{name}", :body => open(public_urls[index]))
         rescue Exception => e
           raise HerokuCloudBackup::Errors::UploadError.new(e.message)
         end
       end
 
-      log "heroku:backup complete"
+      if public_urls[index + 1]
+        execute(index + 1)
+      else
+        log "heroku:backup complete"
+      end
     end
 
     def connection=(connection)
