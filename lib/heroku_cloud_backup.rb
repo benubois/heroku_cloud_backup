@@ -25,19 +25,21 @@ module HerokuCloudBackup
       if !directory
         directory = connection.directories.create(:key => bucket_name)
       end
-
-      public_url = b["public_url"]
+      
+      public_urls = b["public_url"].split("\n")
       created_at = DateTime.parse b["created_at"]
       db_name = b["from_name"]
-      name = "#{created_at.strftime('%Y-%m-%d-%H%M%S')}.dump"
-      begin
-        log "creating #{@backup_path}/#{b["from_name"]}/#{name}"
-        directory.files.create(:key => "#{backup_path}/#{b["from_name"]}/#{name}", :body => open(public_url))
-      rescue Exception => e
-        raise HerokuCloudBackup::Errors::UploadError.new(e.message)
+      base_name = created_at.strftime('%Y-%m-%d-%H%M%S')
+      
+      public_urls.each_with_index do |public_url, index|
+        begin
+          name = "#{base_name}_#{index}.dump"
+          log "creating #{@backup_path}/#{b["from_name"]}/#{name}"
+          directory.files.create(:key => "#{backup_path}/#{b["from_name"]}/#{name}", :body => open(public_url))
+        rescue Exception => e
+          raise HerokuCloudBackup::Errors::UploadError.new(e.message)
+        end
       end
-
-      prune
 
       log "heroku:backup complete"
     end
@@ -107,23 +109,5 @@ module HerokuCloudBackup
       puts "[#{Time.now}] #{message}"
     end
 
-    def prune
-      number_of_files = ENV['HCB_MAX']
-      if number_of_files && number_of_files.to_i > 0
-        directory = connection.directories.get(bucket_name)
-        files = directory.files.all(:prefix => backup_path)
-        file_count = 0
-        files.reverse.each do |file|
-          if file.key =~ Regexp.new("/#{backup_path}\/\d{4}-\d{2}-\d{2}-\d{6}\.sql\.gz$/i")
-            file_count += 1
-          else
-            next
-          end
-          if file_count > number_of_files
-            file.destroy
-          end
-        end
-      end
-    end
   end
 end
